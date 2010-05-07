@@ -1,0 +1,46 @@
+<?php
+// $Id: draggableviews_menu.module,v 1 2010/06/06 18:49:28 sevi Exp $
+
+/**
+ * @file
+ * Draggableviews menu module provides menu items in admin for views that are draggable.
+ */
+
+/**
+ * Implementing hook_menu
+ */
+function draggableviews_menu_menu() {
+  $items = array();
+  $items['admin/content/sortable'] = array(
+    'title' => 'Content Order',
+    'description' => 'Re-arrange the order of content',
+    'page callback' => 'system_admin_menu_block_page',
+    'access arguments' => array('administer nodes'),
+    'file' => 'system.admin.inc',
+    'file path' => drupal_get_path('module', 'system'),
+   	'type' => MENU_NORMAL_ITEM,
+  );
+  
+  $views = views_get_all_views();
+
+	foreach ($views as $view_name => $view) {
+		foreach ($view->display as $key => $display) {
+			if (($display->display_options['style_plugin'] == 'draggabletable' || $view->display['default']->display_options['style_plugin'] == 'draggabletable') 
+						&& $display->display_options['path'] != '' && $display->display_plugin == 'page') {
+
+				$items['admin/content/sortable/'.$view_name.'/'.$display->id] = array (
+					'title' => $display->display_options['title'],
+					'description' => 'Drag and drop sortable list for '.$display->display_options['title'],
+					'page callback' => 'draggableviews_menu_view_page',
+					'page arguments' => array(3, 4),
+					'access arguments' => array('administer nodes'),
+				);
+			}
+		}
+	}
+  return $items;
+}
+
+function draggableviews_menu_view_page($view_name, $display_id){
+	return views_embed_view($view_name, $display_id);
+}
