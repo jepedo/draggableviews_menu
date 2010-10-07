@@ -1,14 +1,7 @@
-; $Id: draggableviews_menu.info,v 1 2010/06/06 10:43:46 sevi Exp $
+; $Id
 name = DraggableViews Menu
 description = Makes menu items in administration for wiews that are draggable
 dependencies[] = views
 dependencies[] = draggableviews
 package = Views
 core = 6.x
-
-; Information added by drupal.org packaging script on 2010-02-07
-version = "6.x-1.0-beta 1"
-core = "6.x"
-project = "draggableviews_menu"
-datestamp = "1273163027"
-

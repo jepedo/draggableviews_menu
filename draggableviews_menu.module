@@ -1,46 +1,173 @@
 <?php
-// $Id: draggableviews_menu.module,v 1 2010/06/06 18:49:28 sevi Exp $
+// $Id$
 
 /**
- * @file
- * Draggableviews menu module provides menu items in admin for views that are draggable.
- */
+* @file
+* Draggableviews menu module provides menu items in admin for views that are draggable.
+*/
 
 /**
- * Implementing hook_menu
+ * Denotes that a block is not enabled in any region and should not be shown.
  */
+define('DRAGGABLE_PATH', '<dragmenu>');
+
+/**
+* Display help and module information
+* 
+* @param @path
+*   Which path of the site we're displaying help.
+* @param arg
+*   Array that holds the current path as would be returned from arg() function.
+* @return
+*   Help text for the path.
+*/
+function draggableviews_menu_help($path, $arg) {
+  $output = '';
+  switch ($path) {
+    case "admin/help#draggableviews_menu":
+      $output = '<p>'. t("Makes menu items for page views that are draggable.") .'</p>';
+      break;
+  }
+  return $output;
+}
+
+/**
+* Implementing hook_admin
+*/
+function draggableviews_menu_admin() {
+  $form['draggableviews_menu_path'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Set the default path for draggable tables to reside'),
+    '#default_value' => variable_get('draggableviews_menu_path', 'admin/content/sortable'),
+    '#size' => 50,
+    '#description' => t('Note the path should be relative to root of Drupal installation and <em>not include a leading/trailing slash</em>.<p><strong>Example:</strong> admin/content/sortable</p>'),
+    '#required' => FALSE,
+  );
+
+  return system_settings_form($form);
+}
+
+/**
+* Implementing hook_menu
+*/
 function draggableviews_menu_menu() {
   $items = array();
-  $items['admin/content/sortable'] = array(
+  
+  $items['admin/settings/draggableviews_meu'] = array(
+    'title' => 'DraggableViews Menu',
+    'description' => 'Configure global settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('draggableviews_menu_admin'),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  
+  $items[variable_get('draggableviews_menu_path', 'admin/content/sortable')] = array(
     'title' => 'Content Order',
     'description' => 'Re-arrange the order of content',
     'page callback' => 'system_admin_menu_block_page',
     'access arguments' => array('administer nodes'),
     'file' => 'system.admin.inc',
     'file path' => drupal_get_path('module', 'system'),
-   	'type' => MENU_NORMAL_ITEM,
+    'type' => MENU_NORMAL_ITEM,
   );
   
+  //  grab all the views
   $views = views_get_all_views();
 
-	foreach ($views as $view_name => $view) {
-		foreach ($view->display as $key => $display) {
-			if (($display->display_options['style_plugin'] == 'draggabletable' || $view->display['default']->display_options['style_plugin'] == 'draggabletable') 
-						&& $display->display_options['path'] != '' && $display->display_plugin == 'page') {
-
-				$items['admin/content/sortable/'.$view_name.'/'.$display->id] = array (
-					'title' => $display->display_options['title'],
-					'description' => 'Drag and drop sortable list for '.$display->display_options['title'],
-					'page callback' => 'draggableviews_menu_view_page',
-					'page arguments' => array(3, 4),
-					'access arguments' => array('administer nodes'),
-				);
-			}
-		}
-	}
+  // dynamically build menu items for all views that are of page type and draggabletable style
+  foreach ($views as $view_name => $view) {
+    foreach ($view->display as $key => $display) {
+      if (draggableviews_menu_criteria($display)) {
+        $items[variable_get('draggableviews_menu_path', 'admin/content/sortable') . '/' . $view_name . '/' . $display->id] = array(
+          'title' => $display->display_options['title'],
+          'description' => 'Drag and drop sortable list for ' . $display->display_options['title'],
+          'page callback' => 'draggableviews_menu_view_page',
+          'page arguments' => array(3, 4),
+          'access arguments' => array('administer nodes'),
+        );
+        
+        /*$items[variable_get('draggableviews_menu_path', 'admin/content/sortable') . '/' . $view_name] = array(
+          'page callback' => 'views_page',
+          'page arguments' => array(3, 4),
+          'access arguments' => array('administer nodes'),
+        );*/
+      }
+    }
+  }
   return $items;
 }
 
-function draggableviews_menu_view_page($view_name, $display_id){
-	return views_embed_view($view_name, $display_id);
+/**
+* Implementing hook_menu_alter
+*/
+function draggableviews_menu_menu_link_alter(&$item){
+  if ($item['path'] == DRAGGABLE_PATH) {
+    dpm($menu_item);
+    $item['link_path'] = variable_get('draggableviews_menu_path', 'admin/content/sortable') . '/' . $items['page arguments'][0];
+  }
+}
+
+/**
+ * Implements hook_views_admin_links_alter
+ */
+function draggableviews_menu_views_admin_links_alter(&$links, &$view) {
+  foreach ($view->display as $key => $display) {
+    if (draggableviews_menu_criteria($display)) {
+      $links[] = array(
+        'title' => $display->display_options['title'],
+        'alt' => 'Click here to resort',
+        'href' => variable_get('draggableviews_menu_path', 'admin/content/sortable') . '/' . $view->name . '/' . $key
+      );
+    }
+  }
+}
+
+/**
+ * Implements hook_views_pre_render
+ */
+function draggableviews_menu_views_pre_render(&$view) {
+  foreach ($view->display as $key => $display) {
+    if (draggableviews_menu_criteria($display)) {
+      $display->handler->options['path'] = variable_get('draggableviews_menu_path', 'admin/content/sortable') . '/' . $view->name;
+    }
+  }
+}
+
+/**
+ * Outputs the draggable views view
+ *
+ * The draggable views view is not altered in anyway. The view passed is simply 
+ * displayed as the rendered view of draggable views
+ *
+ * @param string $view_name
+ *   The name of the view.
+ * 
+ * @param string $display_id
+ *   The id of the view display
+ *
+ */
+function draggableviews_menu_view_page($view_name, $display_id) {
+  return views_embed_view($view_name, $display_id);
+}
+
+/**
+ * Determines if a view display meets draggable views menu criteria
+ *
+ * Checks the views display to make sure the it is draggable and the path is set to <dragmenu>
+ *
+ * @param array $display
+ *   The views display settings.
+ * 
+ * @return boolean
+ *   TRUE on success, FALSE on failure
+ * 
+ */
+function draggableviews_menu_criteria($display) {
+  $criteria = FALSE;
+  if (($display->display_options['style_plugin'] == 'draggabletable' || $view->display['default']->display_options['style_plugin'] == 'draggabletable') 
+  && $display->display_options['path'] == DRAGGABLE_PATH && $display->display_plugin == 'page') {
+    $criteria = TRUE;          
+  }
+  return $criteria;
 }
